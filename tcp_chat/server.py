@@ -27,7 +27,7 @@ import threading
 # Configuration
 # ---------------------------------------------------------------------------
 HOST = '127.0.0.1'   # localhost — only accepts connections from this machine
-PORT = 55000          # arbitrary high port; anything > 1024 needs no root/admin
+PORT = 65432          # arbitrary high port; anything > 1024 needs no root/admin
 
 # ---------------------------------------------------------------------------
 # Shared state — the list of currently connected client sockets

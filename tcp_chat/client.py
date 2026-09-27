@@ -27,7 +27,7 @@ import threading
 # Configuration — must match server.py
 # ---------------------------------------------------------------------------
 HOST = '127.0.0.1'
-PORT = 55000
+PORT = 65432
 
 # ---------------------------------------------------------------------------
 # receive_messages() — runs in a background thread
