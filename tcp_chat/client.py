@@ -87,7 +87,7 @@ def receive_messages(sock: socket.socket) -> None:
 # ---------------------------------------------------------------------------
 # start_client() — connects and runs the send loop in the main thread
 # ---------------------------------------------------------------------------
-def start_client() -> None:
+def start_client(host=HOST, port=PORT) -> None:
     """
     Connect to the server, start the receive thread, then loop reading
     keyboard input and sending it to the server.
@@ -103,8 +103,8 @@ def start_client() -> None:
     #   an ephemeral (temporary) source port (e.g., 49152-65535) for the
     #   client side of the connection. Only servers that must be reachable at
     #   a known port call bind() explicitly.
-    sock.connect((HOST, PORT))
-    print(f"[CONNECTED] Connected to {HOST}:{PORT}")
+    sock.connect((host, port))
+    print(f"[CONNECTED] Connected to {host}:{port}")
 
     # Start the receive thread BEFORE entering the send loop, so we can
     # immediately see the server's welcome message.
@@ -166,8 +166,15 @@ def start_client() -> None:
         sock.close()
 
 
+import argparse
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
-    start_client()
+    parser = argparse.ArgumentParser(description="TCP Chat Client")
+    parser.add_argument('--server-ip', type=str, default=HOST, help="Server IP address (default: 127.0.0.1)")
+    parser.add_argument('--port', type=int, default=PORT, help=f"Server port (default: {PORT})")
+    args = parser.parse_args()
+    
+    start_client(args.server_ip, args.port)

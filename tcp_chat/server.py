@@ -201,9 +201,9 @@ def handle_client(client_socket: socket.socket, addr: tuple) -> None:
 # ---------------------------------------------------------------------------
 # start_server() — creates the listening socket and the accept() loop
 # ---------------------------------------------------------------------------
-def start_server() -> None:
+def start_server(host=HOST) -> None:
     """
-    Bind to HOST:PORT, listen for incoming connections, and for each one
+    Bind to host:PORT, listen for incoming connections, and for each one
     spawn a daemon thread running handle_client().
     """
     # socket.AF_INET  -> IPv4 address family
@@ -224,13 +224,21 @@ def start_server() -> None:
     # Bind: associate this socket with a local (IP, port) pair.
     # '127.0.0.1' means we only accept connections from the local machine.
     # Use '0.0.0.0' to accept from any network interface.
-    server_socket.bind((HOST, PORT))
+    server_socket.bind((host, PORT))
 
     # listen(backlog): mark the socket as passive (listening).
     # backlog=5 -> the OS will queue up to 5 not-yet-accept()ed connections.
     # Connections beyond the backlog are refused by the OS automatically.
     server_socket.listen(5)
-    print(f"[LISTENING] Server is up on {HOST}:{PORT}")
+    
+    if host == '0.0.0.0':
+        print(f"[LISTENING] Server is up on 0.0.0.0:{PORT}")
+        print("  (Listening on all interfaces. Reachable on your LAN.)")
+        try:
+            print(f"  (Likely LAN IP: {socket.gethostbyname(socket.gethostname())})")
+        except: pass
+    else:
+        print(f"[LISTENING] Server is up on {host}:{PORT}")
 
     # -----------------------------------------------------------------------
     # Accept loop — runs forever in the main thread
@@ -265,8 +273,13 @@ def start_server() -> None:
         # We subtract 1 because threading.active_count() includes the main thread.
 
 
+import argparse
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 if __name__ == '__main__':
-    start_server()
+    parser = argparse.ArgumentParser(description="TCP Chat Server")
+    parser.add_argument('--host', type=str, default=HOST, help="Interface to listen on (default: 127.0.0.1, use 0.0.0.0 for LAN)")
+    args = parser.parse_args()
+    start_server(args.host)

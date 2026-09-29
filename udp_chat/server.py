@@ -31,13 +31,21 @@ PORT = 55001
 # We don't need a Lock here because the server is completely single-threaded!
 clients = set()
 
-def start_server() -> None:
+def start_server(host=HOST) -> None:
     # socket.SOCK_DGRAM -> UDP (Unreliable, connectionless, datagram-based)
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     
     # UDP only needs bind(). No listen() or accept().
-    server_socket.bind((HOST, PORT))
-    print(f"[LISTENING] UDP Server is up on {HOST}:{PORT}")
+    server_socket.bind((host, PORT))
+    
+    if host == '0.0.0.0':
+        print(f"[LISTENING] UDP Server is up on 0.0.0.0:{PORT}")
+        print("  (Listening on all interfaces. Reachable on your LAN.)")
+        try:
+            print(f"  (Likely LAN IP: {socket.gethostbyname(socket.gethostname())})")
+        except: pass
+    else:
+        print(f"[LISTENING] UDP Server is up on {host}:{PORT}")
 
     while True:
         try:
@@ -73,5 +81,10 @@ def start_server() -> None:
         except OSError as e:
             print(f"[ERROR] Socket error: {e}")
 
+import argparse
+
 if __name__ == '__main__':
-    start_server()
+    parser = argparse.ArgumentParser(description="UDP Chat Server")
+    parser.add_argument('--host', type=str, default=HOST, help="Interface to listen on (default: 127.0.0.1, use 0.0.0.0 for LAN)")
+    args = parser.parse_args()
+    start_server(args.host)

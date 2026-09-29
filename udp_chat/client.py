@@ -48,15 +48,17 @@ def receive_messages(sock: socket.socket) -> None:
             print("\n[EXITING] Socket closed.")
             break
 
-def start_client(loss_rate: float = 0.0) -> None:
+def start_client(loss_rate: float = 0.0, host=HOST, port=PORT) -> None:
     # Create UDP socket
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    
+    server_addr = (host, port)
 
     # VIVA POINT — "Connecting" in UDP
     # UDP is connectionless. The server doesn't know we exist until we send 
     # it a datagram. We send a hidden initialization message so the server 
     # adds our (ip, port) to its broadcast registry.
-    sock.sendto(b'', SERVER_ADDR)
+    sock.sendto(b'', server_addr)
     print(f"[JOINED] Listening for messages on UDP... (Loss rate: {loss_rate})")
 
     # Start the receive thread
@@ -76,7 +78,7 @@ def start_client(loss_rate: float = 0.0) -> None:
                 if len(parts) == 2:
                     filepath = parts[1]
                     import udp_chat.file_transfer as ft
-                    ft.send_file(sock, SERVER_ADDR, filepath, loss_rate)
+                    ft.send_file(sock, server_addr, filepath, loss_rate)
                 else:
                     print("[ERROR] Usage: /sendfile <path>")
                 continue
@@ -84,7 +86,7 @@ def start_client(loss_rate: float = 0.0) -> None:
             if message:
                 # Normal chat: format and send as a single datagram
                 full_message = f"{message}\n".encode()
-                sock.sendto(full_message, SERVER_ADDR)
+                sock.sendto(full_message, server_addr)
 
     except KeyboardInterrupt:
         print("\n[EXITING] KeyboardInterrupt")
@@ -98,6 +100,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="UDP Chat Client")
     parser.add_argument('--loss-rate', type=float, default=0.0, 
                         help='Probability of intentionally dropping a file chunk (0.0 to 1.0)')
+    parser.add_argument('--server-ip', type=str, default=HOST, help="Server IP address (default: 127.0.0.1)")
+    parser.add_argument('--port', type=int, default=PORT, help=f"Server port (default: {PORT})")
     args = parser.parse_args()
     
-    start_client(args.loss_rate)
+    start_client(args.loss_rate, args.server_ip, args.port)
