@@ -20,3 +20,7 @@ downloaded_*
 test.txt
 *.pcap
 *.cap
+
+testfile.bin
+results
+captures

@@ -1,99 +1,155 @@
 # Socket Chat & Packet Analyzer
 
-A socket-based multi-client chat and file-transfer system demonstrating the differences between TCP and UDP networking protocols. Built for academic demonstration and packet-level analysis.
+Multi-client chat and file transfer over **TCP and UDP**, with packet-analysis
+tools that show the difference between them. Built for academic demonstration
+(ML3001 — Computer Network Technology, VIT Pune).
 
-## Project Structure
+See **[setup.md](setup.md)** for the step-by-step run and demo order.
 
-- `tcp_chat/`: TCP implementation featuring reliable, ordered byte-stream delivery.
-- `udp_chat/`: UDP implementation featuring connectionless, datagram-based delivery with an application-layer packet loss simulator.
-- `analyzer/`: Packet capture and analysis tools to inspect TCP handshakes, retransmissions, and UDP gaps.
+---
 
-## Setup Instructions
+## Quick start
 
-1. Ensure you have Python 3.8+ installed.
-2. Clone this repository.
-3. No external dependencies are required for the chat servers/clients (uses Python's standard `socket` and `threading` libraries).
-4. For the **analyzer**, install the dependencies listed in `requirements.txt`:
-   ```powershell
-   pip install -r requirements.txt
-   ```
-
-## How to Run the Demos
-
-### 1. TCP Chat & File Transfer
-The TCP version guarantees reliable, ordered delivery implicitly through the OS TCP stack.
-
-**Start the Server:**
 ```powershell
+# Terminal 1
 python tcp_chat/server.py
-```
 
-**Start Clients (open multiple terminals):**
-```powershell
+# Terminal 2 and 3
 python tcp_chat/client.py
 ```
 
-**Commands:**
-- Type any text to chat.
-- Type `/sendfile <path_to_file>` to send a file to all connected clients.
-- Type `/quit` to disconnect gracefully.
+Each client prints one line and then an input line to type on:
 
-### 2. UDP Chat & File Transfer
-The UDP version is connectionless and offers no reliability guarantees. The server acts as a simple datagram reflector, keeping a registry of known client addresses.
-
-**Start the Server:**
-```powershell
-python udp_chat/server.py
+```
+Otter (#2) connected - TCP chat
+Otter > hello everyone
 ```
 
-**Start Clients:**
-```powershell
-python udp_chat/client.py
+Same three commands with `udp_chat/server.py` and `udp_chat/client.py`.
+
+Only the standard library is needed for the servers and clients. The analyzer
+needs the packages in `requirements.txt`.
+
+---
+
+## Client commands
+
+| Type this | What happens |
+|---|---|
+| `<any text>` | Sends a message to everyone else |
+| `/clients` | Lists who is in the room (names and ids) |
+| `/sendfile <path>` | Sends a file to everyone |
+| `/sendfile <path> to=#2` | Sends a file to **client #2 only** |
+| `/sendfile <path> to=@Otter` | Same, by name |
+| `/help` | Lists these commands |
+| `/quit` | Disconnects |
+
+---
+
+## Sending a file to one specific client
+
+The recipient is part of the command, so it is chosen *before* the transfer
+starts, and the server checks it before any byte of the file is sent:
+
+1. The client sends `/FILE <name> <size> to=<selector>` and stops.
+2. The server resolves the selector against the roster and replies:
+   - one connected client → `/SEND`
+   - unknown id/name, an ambiguous name, yourself, or nobody else → `/ERR`
+3. The file body is streamed **only** after `/SEND`.
+
+```
+Otter > /sendfile secret.txt to=#2
+[SENDING] 'secret.txt' (2816 bytes) to #2 - waiting for the server to check the recipient...
+[VERIFIED] File 'secret.txt' will be delivered to @Falcon (#1) only
+[UPLOADING] secret.txt (2816 bytes)...
+[UPLOAD COMPLETE] secret.txt: 2816 bytes in 1 chunk(s) sent.
+Otter >
+File 'secret.txt' was sent successfully [2816 bytes] -> 1 other client(s) -> @Falcon (#1) only
 ```
 
-### 3. UDP Packet Loss Simulation
-To visibly demonstrate what happens when network packets are dropped without TCP's reliability (and why simulating this in TCP requires OS-level interference), use the UDP loss simulator.
+On the receiving client:
 
-**Start the Server:**
-```powershell
-python udp_chat/server.py
+```
+[RECEIVING] secret.txt from @Otter (#2) -> downloaded_secret.txt (2816 bytes) - for you only
+[DOWNLOADING] 2816/2816 bytes (100%)
+[SAVED] downloaded_secret.txt (2816 bytes)
 ```
 
-**Start a Receiver Client:**
-```powershell
-python udp_chat/client.py
+A refused transfer sends nothing to anybody:
+
+```
+Otter > /sendfile secret.txt to=#99
+[NOT SENT] File 'secret.txt' was NOT sent: no connected client matches '99'.
+           Type /clients to see who is in the room.
+Cancelled - nothing was sent. Check the recipient with /clients.
 ```
 
-**Start a Sender Client with 10% simulated loss:**
-```powershell
-python udp_chat/client.py --loss-rate 0.1
+The server pins the verified audience for the whole transfer, so no chunk of a
+private file can reach the rest of the room. Works the same way in both TCP and
+UDP; in UDP the audience is pinned per-transfer because chunks are reflected
+individually.
+
+---
+
+## Who sees what (data abstraction)
+
+The **server** is the only component that sees connection detail. Its console
+keeps the full table — id, name, remote address, join time, uptime — and prints
+it on every connect and roster request:
+
+```
+[NEW CONNECTION] #2 Otter (127.0.0.1:51241) connected.
+  ID   NAME       ADDRESS               JOINED    UPTIME
+  #1   Falcon     127.0.0.1:51240       21:03:20  42s
+  #2   Otter      127.0.0.1:51241       21:03:21  41s
 ```
 
-Send a file from the sender client. You will see deliberate drops logged on the sender side (`[SIMULATOR] Dropped chunk X intentionally`). On the receiver side, after a 3-second timeout, it will summarize the missing sequence numbers (holes in the file).
+A client is told only what it needs: its own name, the name and id of every other
+client (so it can pick one with `to=`), and that somebody joined or left — as a
+name. Addresses, ports, join times and uptimes are never sent to a client, not
+even inside the `/ROSTER` payload.
 
-### 4. Packet Analysis
-The `analyzer` module parses packet captures (`.pcapng` files) captured from Wireshark.
+---
 
-**Analyze a TCP transfer (handshakes, teardown, retransmissions):**
+## Packet analysis
+
+Parse captures taken from Wireshark.
+
 ```powershell
 python analyzer/analyze.py captures/tcp_demo.pcapng
-```
-
-**Analyze a UDP transfer (missing sequence numbers, out of order):**
-```powershell
 python analyzer/analyze_udp.py captures/udp_loss_demo.pcapng --port 55001
+python analyzer/report.py --tcp captures/tcp_demo.pcapng `
+        --udp captures/udp_loss_demo.pcapng --out results/report.md
 ```
 
-**Generate a Comparative Report:**
-Creates a Markdown report comparing TCP and UDP behaviors under loss.
+- `analyze.py` — TCP handshake, teardown, retransmissions
+- `analyze_udp.py` — UDP sequence gaps, duplicates, out-of-order chunks
+- `report.py` — a Markdown report comparing the two, with charts
+
+Filters: `tcp port 65432` for TCP, `udp port 55001` for UDP.
+
+---
+
+## Tests
+
 ```powershell
-python analyzer/report.py --tcp captures/tcp_demo.pcapng --udp captures/udp_loss_demo.pcapng --tcp-loss captures/tcp_loss_demo.pcapng --expected-drops drops.txt --out report.md
+python -m unittest discover tests -v
 ```
 
-*Note on LAN/Wi-Fi Captures:* When running on two different devices over Wi-Fi, you must capture on your Wi-Fi interface instead of the "Adapter for loopback traffic". The display filters remain the same (`tcp.port == 65432` or `udp.port == 55001`). Note that on a real network, the UDP loopback reflection (where the server broadcasts the chunk back to the sender) won't appear on the sender's Wi-Fi capture as a duplicate destination packet; it would appear as an incoming packet from the server. The `analyze_udp.py` script filters strictly by `dport == 55001` (upload traffic), so its deduplication logic works perfectly unchanged for both loopback and Wi-Fi captures.
+No network needed. Covers recipient selection, the text the clients print, and
+the rule that connection detail never leaves the server.
 
-## Known Limitations
+---
 
-- **Loopback Traffic Only:** The current server and client configurations are explicitly hardcoded for `127.0.0.1` (localhost).
-- **Sender-Side Loss Simulation Only:** The UDP loss simulator only drops packets at the application layer *before* they hit the network stack, meaning they will not show up in a Wireshark capture of the loopback adapter.
-- **No Packet Reordering Observed:** Due to the nature of the OS loopback adapter, packets are typically processed instantaneously in-order. True out-of-order delivery usually requires a complex physical network topology to observe reliably.
+## Layout
+
+```
+common_info.py   Shared protocol: control messages, naming, `to=` resolution, output
+tcp_chat/        TCP implementation
+udp_chat/        UDP implementation + packet-loss simulator
+analyzer/        Capture analysis and report generation
+scripts/         check_connection.py — firewall/port check for a two-device run
+tests/           Unit tests
+captures/        Saved .pcapng files
+results/         Recorded hashes, drop logs, generated reports
+```

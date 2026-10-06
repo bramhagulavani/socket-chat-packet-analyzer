@@ -70,14 +70,26 @@ def analyze_udp(pcap_path, server_port, expected_drops_path=None):
         
         # Check if this packet is the file metadata header
         if payload.startswith(b'/FILE '):
-            # Header format: "/FILE <filename> <total_chunks>"
-            parts = payload.split(b' ', 2)
+            # Header format: "/FILE <​filename> <total_chunks> [to=<Name>#<id>] [from=<Name>#<id>]"
+            # The optional trailing fields identify the sender and the single
+            # recipient, so we split on single spaces and read the count from
+            # field 3 rather than lumping the rest of the line into it.
+            parts = payload.split(b' ')
             if len(parts) >= 3:
                 try:
                     total_chunks = int(parts[2])
-                    print(f"Packet {i} [{pkt.time:.6f}]: [FILE HEADER] Expected total chunks: {total_chunks}")
                 except ValueError:
-                    pass
+                    total_chunks = None
+                if total_chunks is not None:
+                    options = parts[3:]
+                    audience = 'the whole room'
+                    for option in options:
+                        if option.startswith(b'to='):
+                            name, _, ident = option[3:].decode('ascii', 'replace').partition('#')
+                            audience = f"{name} (#{ident}) only" if ident else name
+                    print(f"Packet {i} [{pkt.time:.6f}]: [FILE HEADER] Expected total "
+                          f"chunks: {total_chunks} -> {audience}")
+
                     
         # Check if this packet is a file chunk
         elif payload.startswith(b'/CHUNK '):
